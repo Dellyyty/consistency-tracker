@@ -123,16 +123,14 @@ export function computeTaskStats(
   };
 }
 
-export function getMotivationalMessage(percentage: number): string {
-  const { MOTIVATIONAL_MESSAGES } = require('./constants');
-
-  let category: keyof typeof MOTIVATIONAL_MESSAGES;
+export function getMotivationalMessage(percentage: number, messages: typeof import('./constants').MOTIVATIONAL_MESSAGES): string {
+  let category: keyof typeof messages;
   if (percentage === 100) category = 'perfect';
   else if (percentage >= 75) category = 'great';
   else if (percentage >= 50) category = 'good';
   else if (percentage > 0) category = 'low';
   else category = 'none';
 
-  const messages = MOTIVATIONAL_MESSAGES[category];
-  return messages[Math.floor(Math.random() * messages.length)];
+  const pool = messages[category];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
