@@ -13,21 +13,22 @@ import StatCard from '@/components/StatCard';
 import StreakFlame from '@/components/StreakFlame';
 import MotivationalBanner from '@/components/MotivationalBanner';
 import ProgressRing from '@/components/ProgressRing';
+import DayClock from '@/components/DayClock';
 import { getUserToday, getCurrentSessionNumber, getSessionLabel, getCurrentTimeHHMM } from '@/lib/dates';
 import { CheckIn, Completion, Task, SessionStatus, TodayTaskStatus } from '@/lib/types';
-import DayClock from '@/components/DayClock';
 import { Plus, X, Check, Repeat, RotateCw } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const { fetchCheckIns } = useCheckIn(user?.id);
+  const { fetchCheckIns, quickComplete } = useCheckIn(user?.id);
   const { tasks, fetchTasks } = useTasks(user?.id);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expandedSession, setExpandedSession] = useState<number | null>(null);
+  const [togglingTask, setTogglingTask] = useState<string | null>(null);
 
   const timezone = user?.timezone || 'America/New_York';
   const startDate = user?.start_date || getUserToday(timezone);
@@ -63,6 +64,10 @@ export default function DashboardPage() {
     todayCheckIns.some((ci) => ci.id === c.check_in_id)
   );
 
+  // Figure out which session to use for quick-complete
+  // Use current session if available, otherwise use session 1 (for early birds)
+  const quickSession = currentSession || 1;
+
   // Build today's task status list
   const todayTaskStatuses: TodayTaskStatus[] = tasks.map((task) => {
     const taskCompletions = todayCompletions.filter(
@@ -79,6 +84,42 @@ export default function DashboardPage() {
   });
 
   const tasksCompleted = todayTaskStatuses.filter((t) => t.done).length;
+
+  // Quick-complete handler
+  const handleQuickToggle = async (task: Task, currentlyDone: boolean, completedCount: number, requiredCount: number) => {
+    setTogglingTask(task.id);
+
+    // Determine what to do:
+    // If it's a daily task: toggle on/off
+    // If per_session: mark the next uncompleted session dot
+    const shouldComplete = !currentlyDone;
+
+    // For per_session tasks already partially done, always mark the next one
+    // For daily tasks or fully completing, just toggle
+    if (task.frequency === 'per_session' && completedCount > 0 && completedCount < requiredCount) {
+      // Find which session doesn't have this task completed
+      const sessionsWithCompletion = todayCheckIns
+        .filter((ci) => todayCompletions.some((c) => c.check_in_id === ci.id && c.task_id === task.id && c.completed))
+        .map((ci) => ci.session_number);
+
+      // Find next session without completion
+      let targetSession = quickSession;
+      for (let s = 1; s <= 3; s++) {
+        if (!sessionsWithCompletion.includes(s)) {
+          targetSession = s;
+          break;
+        }
+      }
+
+      const result = await quickComplete(today, targetSession, task.id, true, tasks.map((t) => t.id));
+      if (result.success) await loadData();
+    } else {
+      const result = await quickComplete(today, quickSession, task.id, shouldComplete, tasks.map((t) => t.id));
+      if (result.success) await loadData();
+    }
+
+    setTogglingTask(null);
+  };
 
   // Session statuses
   const sessions: SessionStatus[] = checkInTimes
@@ -174,7 +215,7 @@ export default function DashboardPage() {
       {/* Countdown */}
       <Countdown daysLeft={daysLeft} progress={progress} />
 
-      {/* TODAY'S TASKS - the main clear section */}
+      {/* TODAY'S TASKS - tappable checkmarks */}
       <div className="rounded-2xl bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold text-foreground">
@@ -186,57 +227,62 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-2">
-          {todayTaskStatuses.map(({ task, completedCount, requiredCount, done }) => (
-            <div
-              key={task.id}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
-                done ? 'bg-success/10' : 'bg-surface-light'
-              }`}
-            >
-              <span className="text-lg">{task.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${done ? 'text-success' : 'text-foreground'}`}>
-                  {task.name}
-                </p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {task.frequency === 'daily' ? (
-                    <span className="text-[10px] text-muted flex items-center gap-0.5">
-                      <RotateCw size={8} />
-                      Once daily
-                    </span>
+          {todayTaskStatuses.map(({ task, completedCount, requiredCount, done }) => {
+            const isToggling = togglingTask === task.id;
+            return (
+              <button
+                key={task.id}
+                onClick={() => handleQuickToggle(task, done, completedCount, requiredCount)}
+                disabled={isToggling || (task.frequency === 'per_session' && done)}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all active:scale-[0.98] ${
+                  done ? 'bg-success/10' : 'bg-surface-light hover:bg-surface-light/70'
+                } disabled:active:scale-100`}
+              >
+                <span className="text-lg">{task.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${done ? 'text-success' : 'text-foreground'}`}>
+                    {task.name}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {task.frequency === 'daily' ? (
+                      <span className="text-[10px] text-muted flex items-center gap-0.5">
+                        <RotateCw size={8} />
+                        Once daily
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted flex items-center gap-0.5">
+                        <Repeat size={8} />
+                        {completedCount}/{requiredCount} check-ins
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Tappable completion indicator */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {isToggling ? (
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                  ) : requiredCount === 1 ? (
+                    <div className={`flex h-7 w-7 items-center justify-center rounded-full transition-all ${
+                      done ? 'bg-success' : 'border-2 border-muted/40 hover:border-accent'
+                    }`}>
+                      {done && <Check size={16} className="text-white" strokeWidth={3} />}
+                    </div>
                   ) : (
-                    <span className="text-[10px] text-muted flex items-center gap-0.5">
-                      <Repeat size={8} />
-                      Every check-in
-                    </span>
+                    <div className="flex gap-1.5">
+                      {Array.from({ length: requiredCount }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-3 w-3 rounded-full transition-all ${
+                            i < completedCount ? 'bg-success' : 'border-2 border-muted/30'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-              {/* Progress indicator */}
-              <div className="flex items-center gap-1 shrink-0">
-                {requiredCount === 1 ? (
-                  // Daily: single check
-                  <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                    done ? 'bg-success' : 'border-2 border-muted/30'
-                  }`}>
-                    {done && <Check size={14} className="text-white" strokeWidth={3} />}
-                  </div>
-                ) : (
-                  // Per session: show 3 dots
-                  <div className="flex gap-1">
-                    {Array.from({ length: requiredCount }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-2.5 w-2.5 rounded-full ${
-                          i < completedCount ? 'bg-success' : 'bg-muted/20'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -245,7 +291,6 @@ export default function DashboardPage() {
         <h2 className="text-sm font-semibold text-muted">Check-in Sessions</h2>
         {sessions.map((session) => {
           const completedCount = session.completions?.filter((c) => c.completed).length || 0;
-          const sessionTasks = session.status === 'completed' ? tasks : [];
           return (
             <div key={session.sessionNumber}>
               <CheckInCard
@@ -257,23 +302,22 @@ export default function DashboardPage() {
                 totalCount={tasks.length}
                 onClick={() => handleSessionClick(session)}
               />
-              {/* Expanded completed session */}
               {expandedSession === session.sessionNumber && session.status === 'completed' && (
                 <div className="mt-1 space-y-1.5 rounded-xl bg-surface/50 p-3 fade-in-up">
                   {tasks.map((t) => {
-                    const done = session.completions?.some(
+                    const taskDone = session.completions?.some(
                       (c) => c.task_id === t.id && c.completed
                     );
                     return (
                       <div
                         key={t.id}
                         className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
-                          done ? 'text-foreground' : 'text-muted line-through'
+                          taskDone ? 'text-foreground' : 'text-muted line-through'
                         }`}
                       >
                         <span>{t.emoji}</span>
                         <span className="flex-1">{t.name}</span>
-                        {done ? (
+                        {taskDone ? (
                           <span className="text-xs text-success">Done</span>
                         ) : (
                           <X size={14} className="text-danger/50" />
