@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useCheckIn } from '@/lib/hooks/useCheckIn';
 import { useTasks } from '@/lib/hooks/useTasks';
 import TaskCheckbox from '@/components/TaskCheckbox';
 import { getUserToday, getCurrentSessionNumber, getSessionLabel, getNextSessionTime, formatTime12h, getCurrentTimeHHMM } from '@/lib/dates';
 import { CheckIn, Completion, Task } from '@/lib/types';
-import { CheckCircle2, Clock, ArrowLeft, PartyPopper, Sparkles } from 'lucide-react';
+import { CheckCircle2, Clock, ArrowLeft, PartyPopper, Sparkles, AlertTriangle } from 'lucide-react';
 
 export default function CheckInPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { fetchCheckIns, submitCheckIn, loading: submitting } = useCheckIn(user?.id);
   const { tasks, fetchTasks } = useTasks(user?.id);
   const [todayCheckIns, setTodayCheckIns] = useState<CheckIn[]>([]);
@@ -27,6 +28,12 @@ export default function CheckInPage() {
   const currentSession = getCurrentSessionNumber(checkInTimes, timezone);
   const currentTime = getCurrentTimeHHMM(timezone);
 
+  // Allow override via ?session=X for late check-ins
+  const overrideSession = searchParams.get('session');
+  const targetSession = overrideSession ? parseInt(overrideSession, 10) : currentSession;
+  const sortedTimes = [...checkInTimes].sort();
+  const isLateCheckIn = overrideSession ? true : false;
+
   const loadData = useCallback(async () => {
     if (!user) return;
     await fetchTasks();
@@ -40,54 +47,58 @@ export default function CheckInPage() {
     loadData();
   }, [loadData]);
 
-  const alreadyCheckedIn = currentSession
-    ? todayCheckIns.some((ci) => ci.session_number === currentSession)
+  const alreadyCheckedIn = targetSession
+    ? todayCheckIns.some((ci) => ci.session_number === targetSession)
     : false;
 
-  const existingCheckIn = currentSession
-    ? todayCheckIns.find((ci) => ci.session_number === currentSession)
+  const existingCheckIn = targetSession
+    ? todayCheckIns.find((ci) => ci.session_number === targetSession)
     : null;
 
   const existingCompletions = existingCheckIn
     ? todayCompletions.filter((c) => c.check_in_id === existingCheckIn.id)
     : [];
 
-  const sortedTimes = [...checkInTimes].sort();
   const allSessionsDone = sortedTimes.every((_, i) =>
     todayCheckIns.some((ci) => ci.session_number === i + 1)
   );
+
+  // Check if there are any missed sessions (not checked in and time has passed)
+  const missedSessions = sortedTimes
+    .map((time, i) => ({ sessionNum: i + 1, time }))
+    .filter(({ sessionNum, time }) =>
+      !todayCheckIns.some((ci) => ci.session_number === sessionNum) &&
+      currentTime > time &&
+      currentSession !== sessionNum
+    );
 
   // Filter tasks for this session:
   // - per_session tasks always show
   // - daily tasks only show if NOT already completed in a previous session today
   const visibleTasks = tasks.filter((task) => {
     if (task.frequency === 'per_session') return true;
-    // daily: check if already completed in any earlier session
     const alreadyDone = todayCompletions.some(
       (c) => c.task_id === task.id && c.completed
     );
     return !alreadyDone;
   });
 
-  // All tasks shown in check-in (visible + already-done daily tasks shown as disabled)
   const dailyAlreadyDone = tasks.filter((task) => {
     if (task.frequency !== 'daily') return false;
     return todayCompletions.some((c) => c.task_id === task.id && c.completed);
   });
 
   const handleSubmit = async () => {
-    if (!currentSession) return;
+    if (!targetSession) return;
 
-    // Submit completions for ALL tasks (visible ones get user selection, already-done daily tasks get false)
     const taskCompletions = tasks.map((t) => {
-      // If daily task already done in prior session, don't re-submit
       if (dailyAlreadyDone.some((d) => d.id === t.id)) {
         return { taskId: t.id, completed: false };
       }
       return { taskId: t.id, completed: checked[t.id] || false };
     });
 
-    const result = await submitCheckIn(today, currentSession, taskCompletions);
+    const result = await submitCheckIn(today, targetSession, taskCompletions);
     if (result.success) {
       setSubmitted(true);
     }
@@ -111,7 +122,7 @@ export default function CheckInPage() {
   }
 
   // All sessions completed for the day
-  if (allSessionsDone && loaded) {
+  if (allSessionsDone && !submitted && loaded) {
     const totalTasks = tasks.reduce((sum, t) => sum + (t.frequency === 'daily' ? 1 : 3), 0);
     const totalCompleted = tasks.reduce((sum, t) => {
       const count = todayCompletions.filter((c) => c.task_id === t.id && c.completed).length;
@@ -155,8 +166,8 @@ export default function CheckInPage() {
     );
   }
 
-  // Before first check-in time
-  if (!currentSession) {
+  // No target session (before first check-in time and no override)
+  if (!targetSession) {
     const nextTime = getNextSessionTime(checkInTimes, timezone);
     return (
       <div className="mx-auto flex max-w-md flex-col items-center justify-center px-4 pt-20">
@@ -183,7 +194,7 @@ export default function CheckInPage() {
     const completedTasks = visibleTasks.filter((t) => checked[t.id]);
     const nextTime = getNextSessionTime(checkInTimes, timezone);
     const sessionsLeft = sortedTimes.filter((_, i) =>
-      !todayCheckIns.some((ci) => ci.session_number === i + 1) && i + 1 !== currentSession
+      !todayCheckIns.some((ci) => ci.session_number === i + 1) && i + 1 !== targetSession
     ).length;
 
     return (
@@ -191,8 +202,11 @@ export default function CheckInPage() {
         <div className="flex flex-col items-center gap-4 rounded-2xl bg-surface p-6">
           <Sparkles size={48} className="text-success" />
           <h2 className="text-xl font-bold text-foreground">
-            {getSessionLabel(currentSession)} Done!
+            {getSessionLabel(targetSession)} Done!
           </h2>
+          {isLateCheckIn && (
+            <p className="text-xs text-warning font-medium">Late check-in saved</p>
+          )}
           <p className="text-sm text-muted">
             {completedTasks.length}/{visibleTasks.length} tasks completed
           </p>
@@ -215,7 +229,7 @@ export default function CheckInPage() {
             )}
           </div>
 
-          {sessionsLeft > 0 && nextTime && (
+          {sessionsLeft > 0 && nextTime && !isLateCheckIn && (
             <p className="mt-2 text-xs text-muted">
               Next check-in at {formatTime12h(nextTime)} ({sessionsLeft} session{sessionsLeft > 1 ? 's' : ''} left)
             </p>
@@ -244,7 +258,7 @@ export default function CheckInPage() {
         <div className="flex flex-col items-center gap-4 rounded-2xl bg-surface p-6">
           <CheckCircle2 size={48} className="text-success" />
           <h2 className="text-xl font-bold text-foreground">
-            {getSessionLabel(currentSession)} Already Done
+            {getSessionLabel(targetSession)} Already Done
           </h2>
           <p className="text-sm text-muted">
             {completedTasks.length}/{tasks.length} tasks completed
@@ -299,11 +313,20 @@ export default function CheckInPage() {
             Dashboard
           </button>
           <h1 className="text-xl font-bold text-foreground">
-            {getSessionLabel(currentSession)} Check-in
+            {getSessionLabel(targetSession)} Check-in
           </h1>
-          <p className="text-sm text-muted">
-            Tap each task you completed
-          </p>
+          {isLateCheckIn ? (
+            <div className="mt-1 flex items-center gap-1.5">
+              <AlertTriangle size={12} className="text-warning" />
+              <p className="text-xs font-medium text-warning">
+                Late check-in for {formatTime12h(sortedTimes[targetSession - 1] || '00:00')}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted">
+              Tap each task you completed
+            </p>
+          )}
         </div>
         {visibleTasks.length > 0 && (
           <button
@@ -319,10 +342,10 @@ export default function CheckInPage() {
         <div className="flex flex-col items-center gap-4 rounded-2xl bg-surface p-8">
           <p className="text-sm text-muted">No tasks set up yet.</p>
           <button
-            onClick={() => router.push('/settings')}
+            onClick={() => router.push('/dashboard')}
             className="rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-light"
           >
-            Add Tasks in Settings
+            Add Tasks on Dashboard
           </button>
         </div>
       ) : (
@@ -370,7 +393,7 @@ export default function CheckInPage() {
             ) : (
               <>
                 <CheckCircle2 size={20} />
-                Submit Check-in ({checkedCount}/{visibleTasks.length})
+                Submit {isLateCheckIn ? 'Late ' : ''}Check-in ({checkedCount}/{visibleTasks.length})
               </>
             )}
           </button>

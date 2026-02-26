@@ -545,10 +545,14 @@ export default function DashboardPage() {
                           : isCompleted
                           ? 'bg-surface/60 p-3'
                           : isMissed
-                          ? 'bg-danger/5 p-3'
+                          ? 'bg-danger/5 border border-danger/10 p-3 cursor-pointer active:scale-[0.98]'
                           : 'bg-surface/30 p-3'
                       }`}
-                      onClick={isAvailable ? () => router.push('/checkin') : undefined}
+                      onClick={
+                        isAvailable ? () => router.push('/checkin') :
+                        isMissed ? () => router.push(`/checkin?session=${session.sessionNumber}`) :
+                        undefined
+                      }
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -571,7 +575,10 @@ export default function DashboardPage() {
                           </div>
                         )}
                         {isMissed && (
-                          <span className="text-[11px] text-danger/50 font-medium">Missed</span>
+                          <div className="flex items-center gap-1 rounded-lg bg-danger/20 px-2.5 py-1.5">
+                            <span className="text-[11px] font-bold text-danger">Late check-in</span>
+                            <ChevronRight size={12} className="text-danger" />
+                          </div>
                         )}
                         {isUpcoming && (
                           <span className="text-[11px] text-muted flex items-center gap-1">
