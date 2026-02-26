@@ -10,6 +10,7 @@ interface CheckInCardProps {
   status: 'completed' | 'available' | 'upcoming' | 'missed';
   completedCount?: number;
   totalCount?: number;
+  expanded?: boolean;
   onClick?: () => void;
 }
 
@@ -20,6 +21,7 @@ export default function CheckInCard({
   status,
   completedCount = 0,
   totalCount = 0,
+  expanded = false,
   onClick,
 }: CheckInCardProps) {
   const statusConfig = {
@@ -70,7 +72,12 @@ export default function CheckInCard({
       </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted">{formatTime12h(time)}</span>
-        {status === 'completed' && <ChevronDown size={14} className="text-muted" />}
+        {status === 'completed' && (
+          <ChevronDown
+            size={16}
+            className={`text-muted transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          />
+        )}
       </div>
     </button>
   );

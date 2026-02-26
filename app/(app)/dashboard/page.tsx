@@ -300,6 +300,7 @@ export default function DashboardPage() {
                 status={session.status}
                 completedCount={completedCount}
                 totalCount={tasks.length}
+                expanded={expandedSession === session.sessionNumber}
                 onClick={() => handleSessionClick(session)}
               />
               {expandedSession === session.sessionNumber && session.status === 'completed' && (
