@@ -14,9 +14,12 @@ export default function PinPad({ onSubmit, loading, error, minLength = 4 }: PinP
   const [pin, setPin] = useState('');
 
   const handlePress = (digit: string) => {
-    if (pin.length < 8) {
+    if (pin.length < 4) {
       const newPin = pin + digit;
       setPin(newPin);
+      if (newPin.length === 4) {
+        onSubmit(newPin);
+      }
     }
   };
 
@@ -34,7 +37,7 @@ export default function PinPad({ onSubmit, loading, error, minLength = 4 }: PinP
     <div className="flex flex-col items-center gap-6">
       {/* PIN dots */}
       <div className="flex gap-3">
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
             className={`h-3.5 w-3.5 rounded-full transition-all ${
@@ -76,17 +79,11 @@ export default function PinPad({ onSubmit, loading, error, minLength = 4 }: PinP
         >
           0
         </button>
-        <button
-          onClick={handleSubmit}
-          disabled={loading || pin.length < minLength}
-          className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-sm font-bold text-white transition-all hover:bg-accent-light active:scale-95 disabled:opacity-40"
-        >
-          {loading ? (
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-          ) : (
-            'GO'
+        <div className="flex h-16 w-16 items-center justify-center">
+          {loading && (
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           )}
-        </button>
+        </div>
       </div>
     </div>
   );
