@@ -35,13 +35,19 @@ export default function SettingsPage() {
     }
   }, [user, fetchTasks]);
 
+  const [addingTask, setAddingTask] = useState(false);
+
   const handleAddTask = async () => {
-    if (!newTaskName.trim()) return;
-    await addTask(newTaskName.trim(), newTaskEmoji, newTaskFrequency);
-    setNewTaskName('');
-    setNewTaskEmoji('✅');
-    setNewTaskFrequency('per_session');
-    setShowEmojiPicker(false);
+    if (!newTaskName.trim() || addingTask) return;
+    setAddingTask(true);
+    const result = await addTask(newTaskName.trim(), newTaskEmoji, newTaskFrequency);
+    setAddingTask(false);
+    if (result) {
+      setNewTaskName('');
+      setNewTaskEmoji('✅');
+      setNewTaskFrequency('per_session');
+      setShowEmojiPicker(false);
+    }
   };
 
   const handleRemoveTask = async (taskId: string) => {
@@ -137,7 +143,7 @@ export default function SettingsPage() {
         {tasks.map((task, i) => (
           <div
             key={task.id}
-            className="rounded-xl bg-surface p-3"
+            className="fade-in-up rounded-xl bg-surface p-3"
           >
             <div className="flex items-center gap-2">
               {/* Reorder */}
@@ -227,10 +233,14 @@ export default function SettingsPage() {
             />
             <button
               onClick={handleAddTask}
-              disabled={!newTaskName.trim()}
+              disabled={!newTaskName.trim() || addingTask}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-all hover:bg-accent-light active:scale-95 disabled:opacity-40"
             >
-              <Plus size={18} />
+              {addingTask ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Plus size={18} />
+              )}
             </button>
           </div>
 

@@ -29,11 +29,11 @@ export default function DayClock({ timezone }: DayClockProps) {
   return (
     <div className="flex flex-col items-center">
       <div className="flex items-baseline gap-0.5 font-mono tabular-nums">
-        <span className="text-2xl font-bold text-foreground">{pad(timeLeft.hours)}</span>
-        <span className="text-lg text-muted animate-pulse">:</span>
-        <span className="text-2xl font-bold text-foreground">{pad(timeLeft.minutes)}</span>
-        <span className="text-lg text-muted animate-pulse">:</span>
-        <span className="text-2xl font-bold text-accent-light">{pad(timeLeft.seconds)}</span>
+        <span className="text-xl font-bold text-foreground">{pad(timeLeft.hours)}</span>
+        <span className="text-sm text-muted animate-pulse">:</span>
+        <span className="text-xl font-bold text-foreground">{pad(timeLeft.minutes)}</span>
+        <span className="text-sm text-muted animate-pulse">:</span>
+        <span className="text-xl font-bold text-accent-light">{pad(timeLeft.seconds)}</span>
       </div>
       <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">left today</span>
     </div>
