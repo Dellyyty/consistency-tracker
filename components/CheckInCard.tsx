@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, Circle, ChevronDown } from 'lucide-react';
 import { formatTime12h } from '@/lib/dates';
 
 interface CheckInCardProps {
@@ -26,7 +26,7 @@ export default function CheckInCard({
     completed: {
       icon: CheckCircle2,
       color: 'text-success',
-      bg: 'bg-success/10 border-success/20',
+      bg: 'bg-success/10 border-success/20 cursor-pointer',
       text: `${completedCount}/${totalCount} tasks`,
     },
     available: {
@@ -51,13 +51,14 @@ export default function CheckInCard({
 
   const config = statusConfig[status];
   const Icon = config.icon;
+  const isClickable = status === 'available' || status === 'completed';
 
   return (
     <button
-      onClick={status === 'available' ? onClick : undefined}
-      disabled={status !== 'available'}
+      onClick={isClickable ? onClick : undefined}
+      disabled={!isClickable}
       className={`flex w-full items-center gap-4 rounded-xl border p-4 transition-all ${config.bg} ${
-        status === 'available' ? 'active:scale-[0.98]' : ''
+        isClickable ? 'active:scale-[0.98]' : ''
       }`}
     >
       <Icon size={28} className={config.color} />
@@ -67,7 +68,10 @@ export default function CheckInCard({
         </span>
         <span className={`text-xs ${config.color}`}>{config.text}</span>
       </div>
-      <span className="text-xs text-muted">{formatTime12h(time)}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted">{formatTime12h(time)}</span>
+        {status === 'completed' && <ChevronDown size={14} className="text-muted" />}
+      </div>
     </button>
   );
 }

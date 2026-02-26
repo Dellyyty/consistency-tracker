@@ -36,14 +36,18 @@ export default function Home() {
     try {
       if (mode === 'login') {
         const result = await login(pin);
-        if (!result.success) setError(result.error || 'Login failed');
+        if (!result.success) {
+          setError(result.error || 'Invalid PIN');
+        }
       } else {
         if (!name.trim()) {
-          setError('Enter a display name');
+          setError('Enter your name first');
           return;
         }
         const result = await signup(pin, name.trim());
-        if (!result.success) setError(result.error || 'Signup failed');
+        if (!result.success) {
+          setError(result.error || 'Signup failed');
+        }
       }
     } finally {
       setSubmitting(false);
@@ -58,20 +62,27 @@ export default function Home() {
           Consistency Tracker
         </h1>
         <p className="text-sm text-muted">
-          {mode === 'login' ? 'Enter your PIN to continue' : 'Create your account'}
+          {mode === 'login' ? 'Enter your 4-digit PIN' : 'Set up your account'}
         </p>
       </div>
 
       {mode === 'create' && (
         <div className="mb-6 w-full max-w-[240px]">
+          <label className="mb-1.5 block text-center text-xs font-medium text-muted">
+            What should we call you?
+          </label>
           <input
             type="text"
             placeholder="Your name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); setError(''); }}
             className="w-full rounded-xl border border-surface-light bg-surface px-4 py-3 text-center text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
             maxLength={20}
+            autoFocus
           />
+          {name.trim() && (
+            <p className="mt-2 text-center text-xs text-muted">Now choose a 4-digit PIN</p>
+          )}
         </div>
       )}
 
@@ -81,8 +92,9 @@ export default function Home() {
         onClick={() => {
           setMode(mode === 'login' ? 'create' : 'login');
           setError('');
+          setName('');
         }}
-        className="mt-8 text-sm text-muted hover:text-accent-light"
+        className="mt-8 text-sm text-muted transition-colors hover:text-accent-light"
       >
         {mode === 'login' ? 'Create new account' : 'Already have an account? Log in'}
       </button>

@@ -13,8 +13,10 @@ import StatCard from '@/components/StatCard';
 import StreakFlame from '@/components/StreakFlame';
 import MotivationalBanner from '@/components/MotivationalBanner';
 import ProgressRing from '@/components/ProgressRing';
+import TaskCheckbox from '@/components/TaskCheckbox';
 import { getUserToday, getCurrentSessionNumber, getSessionLabel, getCurrentTimeHHMM } from '@/lib/dates';
 import { CheckIn, Completion, Task, SessionStatus } from '@/lib/types';
+import { Plus, X } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -25,6 +27,7 @@ export default function DashboardPage() {
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [expandedSession, setExpandedSession] = useState<number | null>(null);
 
   const timezone = user?.timezone || 'America/New_York';
   const startDate = user?.start_date || getUserToday(timezone);
@@ -76,7 +79,7 @@ export default function DashboardPage() {
       }
 
       const sessionCompletions = existingCheckIn
-        ? completions.filter((c) => c.check_in_id === existingCheckIn.id && c.completed)
+        ? completions.filter((c) => c.check_in_id === existingCheckIn.id)
         : [];
 
       return {
@@ -97,6 +100,44 @@ export default function DashboardPage() {
     );
   }
 
+  // First-time user with no tasks - onboarding
+  if (tasks.length === 0) {
+    return (
+      <div className="mx-auto max-w-md px-4 pt-6">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-foreground">
+            Welcome, {user?.display_name}!
+          </h1>
+          <p className="text-sm text-muted">Let&apos;s get you set up.</p>
+        </div>
+
+        <Countdown daysLeft={daysLeft} progress={progress} />
+
+        <div className="mt-6 flex flex-col items-center gap-4 rounded-2xl border border-dashed border-surface-light bg-surface p-8">
+          <Plus size={40} className="text-muted" />
+          <h2 className="text-lg font-bold text-foreground">Add your daily tasks</h2>
+          <p className="text-center text-sm text-muted">
+            Set up the habits you want to track every day. You&apos;ll check in 3 times daily to mark what you completed.
+          </p>
+          <button
+            onClick={() => router.push('/settings')}
+            className="mt-2 rounded-xl bg-accent px-8 py-3 text-sm font-bold text-white transition-all hover:bg-accent-light active:scale-[0.98]"
+          >
+            Set Up Tasks
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleSessionClick = (session: SessionStatus) => {
+    if (session.status === 'available') {
+      router.push('/checkin');
+    } else if (session.status === 'completed') {
+      setExpandedSession(expandedSession === session.sessionNumber ? null : session.sessionNumber);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-md space-y-4 px-4 pt-6">
       {/* Header */}
@@ -116,18 +157,48 @@ export default function DashboardPage() {
       {/* Today's Sessions */}
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-muted">Today&apos;s Check-ins</h2>
-        {sessions.map((session) => (
-          <CheckInCard
-            key={session.sessionNumber}
-            sessionNumber={session.sessionNumber}
-            label={session.label}
-            time={session.time}
-            status={session.status}
-            completedCount={session.completions?.length || 0}
-            totalCount={tasks.length}
-            onClick={() => router.push('/checkin')}
-          />
-        ))}
+        {sessions.map((session) => {
+          const completedCount = session.completions?.filter((c) => c.completed).length || 0;
+          return (
+            <div key={session.sessionNumber}>
+              <CheckInCard
+                sessionNumber={session.sessionNumber}
+                label={session.label}
+                time={session.time}
+                status={session.status}
+                completedCount={completedCount}
+                totalCount={tasks.length}
+                onClick={() => handleSessionClick(session)}
+              />
+              {/* Expanded completed session - show task results */}
+              {expandedSession === session.sessionNumber && session.status === 'completed' && (
+                <div className="mt-1 space-y-1.5 rounded-xl bg-surface/50 p-3 fade-in-up">
+                  {tasks.map((t) => {
+                    const done = session.completions?.some(
+                      (c) => c.task_id === t.id && c.completed
+                    );
+                    return (
+                      <div
+                        key={t.id}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
+                          done ? 'text-foreground' : 'text-muted line-through'
+                        }`}
+                      >
+                        <span>{t.emoji}</span>
+                        <span className="flex-1">{t.name}</span>
+                        {done ? (
+                          <span className="text-xs text-success">Done</span>
+                        ) : (
+                          <X size={14} className="text-danger/50" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Quick Stats */}

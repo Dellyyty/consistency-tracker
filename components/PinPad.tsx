@@ -1,56 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Delete } from 'lucide-react';
 
 interface PinPadProps {
   onSubmit: (pin: string) => void;
   loading?: boolean;
   error?: string;
-  minLength?: number;
 }
 
-export default function PinPad({ onSubmit, loading, error, minLength = 4 }: PinPadProps) {
+export default function PinPad({ onSubmit, loading, error }: PinPadProps) {
   const [pin, setPin] = useState('');
 
+  // Reset PIN when error changes (failed attempt)
+  useEffect(() => {
+    if (error) {
+      setPin('');
+    }
+  }, [error]);
+
   const handlePress = (digit: string) => {
-    if (pin.length < 4) {
-      const newPin = pin + digit;
-      setPin(newPin);
-      if (newPin.length === 4) {
-        onSubmit(newPin);
-      }
+    if (loading || pin.length >= 4) return;
+    const newPin = pin + digit;
+    setPin(newPin);
+    if (newPin.length === 4) {
+      onSubmit(newPin);
     }
   };
 
   const handleDelete = () => {
+    if (loading) return;
     setPin((prev) => prev.slice(0, -1));
-  };
-
-  const handleSubmit = () => {
-    if (pin.length >= minLength) {
-      onSubmit(pin);
-    }
   };
 
   return (
     <div className="flex flex-col items-center gap-6">
       {/* PIN dots */}
-      <div className="flex gap-3">
+      <div className="flex gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className={`h-3.5 w-3.5 rounded-full transition-all ${
+            className={`h-4 w-4 rounded-full transition-all duration-200 ${
               i < pin.length
                 ? 'scale-110 bg-accent-light'
                 : 'bg-surface-light'
-            }`}
+            } ${error && pin.length === 0 ? 'animate-pulse bg-danger/40' : ''}`}
           />
         ))}
       </div>
 
       {error && (
-        <p className="text-sm text-danger">{error}</p>
+        <p className="text-sm font-medium text-danger">{error}</p>
       )}
 
       {/* Keypad */}
@@ -60,7 +60,7 @@ export default function PinPad({ onSubmit, loading, error, minLength = 4 }: PinP
             key={digit}
             onClick={() => handlePress(digit)}
             disabled={loading}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-xl font-semibold text-foreground transition-all hover:bg-surface-light active:scale-95"
+            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-xl font-semibold text-foreground transition-all hover:bg-surface-light active:scale-95 disabled:opacity-50"
           >
             {digit}
           </button>
@@ -75,7 +75,7 @@ export default function PinPad({ onSubmit, loading, error, minLength = 4 }: PinP
         <button
           onClick={() => handlePress('0')}
           disabled={loading}
-          className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-xl font-semibold text-foreground transition-all hover:bg-surface-light active:scale-95"
+          className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-xl font-semibold text-foreground transition-all hover:bg-surface-light active:scale-95 disabled:opacity-50"
         >
           0
         </button>

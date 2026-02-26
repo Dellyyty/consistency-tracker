@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTasks } from '@/lib/hooks/useTasks';
 import { supabase } from '@/lib/supabase/client';
 import { TASK_EMOJIS } from '@/lib/constants';
-import { Plus, X, GripVertical, Clock, User, Globe, LogOut } from 'lucide-react';
+import { Plus, X, ArrowUp, ArrowDown, Clock, User, Globe, LogOut, Check, ArrowLeft, Trash2 } from 'lucide-react';
 import { Task } from '@/lib/types';
 
 export default function SettingsPage() {
   const { user, logout, refreshUser } = useAuth();
+  const router = useRouter();
   const { tasks, fetchTasks, addTask, removeTask, reorderTasks } = useTasks(user?.id);
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskEmoji, setNewTaskEmoji] = useState('✅');
@@ -20,6 +22,8 @@ export default function SettingsPage() {
     (user?.check_in_times as string[]) || ['07:00', '12:00', '20:00']
   );
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -35,11 +39,24 @@ export default function SettingsPage() {
     await addTask(newTaskName.trim(), newTaskEmoji);
     setNewTaskName('');
     setNewTaskEmoji('✅');
+    setShowEmojiPicker(false);
+  };
+
+  const handleRemoveTask = async (taskId: string) => {
+    if (confirmRemove === taskId) {
+      await removeTask(taskId);
+      setConfirmRemove(null);
+    } else {
+      setConfirmRemove(taskId);
+      // Auto-dismiss confirm after 3s
+      setTimeout(() => setConfirmRemove((prev) => (prev === taskId ? null : prev)), 3000);
+    }
   };
 
   const handleSaveProfile = async () => {
     if (!user) return;
     setSaving(true);
+    setSaved(false);
     await supabase
       .from('users')
       .update({
@@ -50,6 +67,8 @@ export default function SettingsPage() {
       .eq('id', user.id);
     await refreshUser();
     setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
   };
 
   const handleTimeChange = (index: number, value: string) => {
@@ -83,34 +102,72 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-6 px-4 pt-6">
-      <h1 className="text-xl font-bold text-foreground">Settings</h1>
+      {/* Header */}
+      <div>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="mb-2 flex items-center gap-1 text-xs text-muted transition-colors hover:text-foreground"
+        >
+          <ArrowLeft size={14} />
+          Dashboard
+        </button>
+        <h1 className="text-xl font-bold text-foreground">Settings</h1>
+      </div>
 
       {/* Tasks */}
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-muted">
           <span>Your Tasks</span>
-          <span className="text-xs text-muted">({tasks.length})</span>
+          <span className="rounded-full bg-surface-light px-2 py-0.5 text-xs">{tasks.length}</span>
         </h2>
+
+        {tasks.length === 0 && (
+          <div className="rounded-xl border border-dashed border-surface-light bg-surface/50 p-6 text-center">
+            <p className="text-sm text-muted">No tasks yet. Add your first one below!</p>
+            <p className="mt-1 text-xs text-muted">These are the habits you&apos;ll track at each check-in.</p>
+          </div>
+        )}
 
         {tasks.map((task, i) => (
           <div
             key={task.id}
             className="flex items-center gap-2 rounded-xl bg-surface p-3"
           >
-            <button
-              onClick={() => moveTask(i, 'up')}
-              disabled={i === 0}
-              className="text-muted disabled:opacity-20"
-            >
-              <GripVertical size={16} />
-            </button>
+            {/* Reorder buttons */}
+            <div className="flex flex-col gap-0.5">
+              <button
+                onClick={() => moveTask(i, 'up')}
+                disabled={i === 0}
+                className="rounded p-0.5 text-muted transition-colors hover:text-foreground disabled:opacity-20"
+              >
+                <ArrowUp size={12} />
+              </button>
+              <button
+                onClick={() => moveTask(i, 'down')}
+                disabled={i === tasks.length - 1}
+                className="rounded p-0.5 text-muted transition-colors hover:text-foreground disabled:opacity-20"
+              >
+                <ArrowDown size={12} />
+              </button>
+            </div>
             <span className="text-xl">{task.emoji}</span>
             <span className="flex-1 text-sm font-medium text-foreground">{task.name}</span>
             <button
-              onClick={() => removeTask(task.id)}
-              className="rounded-lg p-1.5 text-muted hover:bg-danger/20 hover:text-danger"
+              onClick={() => handleRemoveTask(task.id)}
+              className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-all ${
+                confirmRemove === task.id
+                  ? 'bg-danger text-white'
+                  : 'text-muted hover:bg-danger/20 hover:text-danger'
+              }`}
             >
-              <X size={16} />
+              {confirmRemove === task.id ? (
+                <span className="flex items-center gap-1">
+                  <Trash2 size={12} />
+                  Confirm
+                </span>
+              ) : (
+                <X size={16} />
+              )}
             </button>
           </div>
         ))}
@@ -120,7 +177,8 @@ export default function SettingsPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-light text-xl"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-light text-xl transition-colors hover:bg-surface-light/80"
+              title="Pick emoji"
             >
               {newTaskEmoji}
             </button>
@@ -136,14 +194,14 @@ export default function SettingsPage() {
             <button
               onClick={handleAddTask}
               disabled={!newTaskName.trim()}
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-white disabled:opacity-40"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-all hover:bg-accent-light active:scale-95 disabled:opacity-40"
             >
               <Plus size={18} />
             </button>
           </div>
 
           {showEmojiPicker && (
-            <div className="flex flex-wrap gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 border-t border-surface-light pt-3">
               {TASK_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
@@ -151,8 +209,8 @@ export default function SettingsPage() {
                     setNewTaskEmoji(emoji);
                     setShowEmojiPicker(false);
                   }}
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg ${
-                    newTaskEmoji === emoji ? 'bg-accent/30 ring-1 ring-accent' : 'bg-surface-light'
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg text-lg transition-all ${
+                    newTaskEmoji === emoji ? 'bg-accent/30 ring-1 ring-accent' : 'bg-surface-light hover:bg-surface-light/80'
                   }`}
                 >
                   {emoji}
@@ -225,9 +283,25 @@ export default function SettingsPage() {
       <button
         onClick={handleSaveProfile}
         disabled={saving}
-        className="flex w-full items-center justify-center rounded-xl bg-accent py-3 text-sm font-bold text-white transition-all hover:bg-accent-light disabled:opacity-50"
+        className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all ${
+          saved
+            ? 'bg-success text-white'
+            : 'bg-accent text-white hover:bg-accent-light'
+        } disabled:opacity-50`}
       >
-        {saving ? 'Saving...' : 'Save Settings'}
+        {saving ? (
+          <>
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            Saving...
+          </>
+        ) : saved ? (
+          <>
+            <Check size={18} />
+            Saved!
+          </>
+        ) : (
+          'Save Settings'
+        )}
       </button>
 
       {/* Logout */}
@@ -238,6 +312,9 @@ export default function SettingsPage() {
         <LogOut size={16} />
         Log Out
       </button>
+
+      {/* Bottom spacer for nav bar */}
+      <div className="h-4" />
     </div>
   );
 }
