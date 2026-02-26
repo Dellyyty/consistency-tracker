@@ -15,6 +15,7 @@ import MotivationalBanner from '@/components/MotivationalBanner';
 import ProgressRing from '@/components/ProgressRing';
 import { getUserToday, getCurrentSessionNumber, getSessionLabel, getCurrentTimeHHMM } from '@/lib/dates';
 import { CheckIn, Completion, Task, SessionStatus, TodayTaskStatus } from '@/lib/types';
+import DayClock from '@/components/DayClock';
 import { Plus, X, Check, Repeat, RotateCw } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -285,6 +286,13 @@ export default function DashboardPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Today's Progress + Live Clock */}
+      <div className="flex items-center justify-around rounded-2xl bg-surface p-5">
+        <ProgressRing percentage={stats.overall.today} size={90} strokeWidth={7} label="today" />
+        <div className="h-12 w-px bg-surface-light" />
+        <DayClock timezone={timezone} />
       </div>
 
       {/* Quick Stats */}
