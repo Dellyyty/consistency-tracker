@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { Task } from '@/lib/types';
+import { Task, TaskFrequency } from '@/lib/types';
 
 export function useTasks(userId: string | undefined) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -31,7 +31,7 @@ export function useTasks(userId: string | undefined) {
   );
 
   const addTask = useCallback(
-    async (name: string, emoji: string) => {
+    async (name: string, emoji: string, frequency: TaskFrequency = 'per_session') => {
       if (!userId) return null;
 
       setLoading(true);
@@ -44,6 +44,7 @@ export function useTasks(userId: string | undefined) {
             user_id: userId,
             name,
             emoji,
+            frequency,
             sort_order: maxOrder + 1,
           })
           .select()
@@ -59,6 +60,27 @@ export function useTasks(userId: string | undefined) {
       }
     },
     [userId, tasks]
+  );
+
+  const updateTask = useCallback(
+    async (taskId: string, updates: Partial<Pick<Task, 'name' | 'emoji' | 'frequency'>>) => {
+      setLoading(true);
+      try {
+        const { error } = await supabase
+          .from('tasks')
+          .update(updates)
+          .eq('id', taskId);
+
+        if (!error) {
+          setTasks((prev) =>
+            prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t))
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
   );
 
   const removeTask = useCallback(
@@ -93,5 +115,5 @@ export function useTasks(userId: string | undefined) {
     []
   );
 
-  return { tasks, fetchTasks, addTask, removeTask, reorderTasks, loading };
+  return { tasks, fetchTasks, addTask, updateTask, removeTask, reorderTasks, loading };
 }

@@ -1,20 +1,21 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useTasks } from '@/lib/hooks/useTasks';
 import { supabase } from '@/lib/supabase/client';
 import { TASK_EMOJIS } from '@/lib/constants';
-import { Plus, X, ArrowUp, ArrowDown, Clock, User, Globe, LogOut, Check, ArrowLeft, Trash2 } from 'lucide-react';
-import { Task } from '@/lib/types';
+import { TaskFrequency } from '@/lib/types';
+import { Plus, X, ArrowUp, ArrowDown, Clock, User, Globe, LogOut, Check, ArrowLeft, Trash2, Repeat, RotateCw } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
-  const { tasks, fetchTasks, addTask, removeTask, reorderTasks } = useTasks(user?.id);
+  const { tasks, fetchTasks, addTask, updateTask, removeTask, reorderTasks } = useTasks(user?.id);
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskEmoji, setNewTaskEmoji] = useState('✅');
+  const [newTaskFrequency, setNewTaskFrequency] = useState<TaskFrequency>('per_session');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [timezone, setTimezone] = useState(user?.timezone || '');
@@ -36,9 +37,10 @@ export default function SettingsPage() {
 
   const handleAddTask = async () => {
     if (!newTaskName.trim()) return;
-    await addTask(newTaskName.trim(), newTaskEmoji);
+    await addTask(newTaskName.trim(), newTaskEmoji, newTaskFrequency);
     setNewTaskName('');
     setNewTaskEmoji('✅');
+    setNewTaskFrequency('per_session');
     setShowEmojiPicker(false);
   };
 
@@ -48,9 +50,13 @@ export default function SettingsPage() {
       setConfirmRemove(null);
     } else {
       setConfirmRemove(taskId);
-      // Auto-dismiss confirm after 3s
       setTimeout(() => setConfirmRemove((prev) => (prev === taskId ? null : prev)), 3000);
     }
+  };
+
+  const toggleFrequency = async (taskId: string, current: TaskFrequency) => {
+    const next = current === 'daily' ? 'per_session' : 'daily';
+    await updateTask(taskId, { frequency: next });
   };
 
   const handleSaveProfile = async () => {
@@ -131,54 +137,82 @@ export default function SettingsPage() {
         {tasks.map((task, i) => (
           <div
             key={task.id}
-            className="flex items-center gap-2 rounded-xl bg-surface p-3"
+            className="rounded-xl bg-surface p-3"
           >
-            {/* Reorder buttons */}
-            <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              {/* Reorder */}
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => moveTask(i, 'up')}
+                  disabled={i === 0}
+                  className="rounded p-0.5 text-muted transition-colors hover:text-foreground disabled:opacity-20"
+                >
+                  <ArrowUp size={12} />
+                </button>
+                <button
+                  onClick={() => moveTask(i, 'down')}
+                  disabled={i === tasks.length - 1}
+                  className="rounded p-0.5 text-muted transition-colors hover:text-foreground disabled:opacity-20"
+                >
+                  <ArrowDown size={12} />
+                </button>
+              </div>
+              <span className="text-xl">{task.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium text-foreground">{task.name}</span>
+              </div>
               <button
-                onClick={() => moveTask(i, 'up')}
-                disabled={i === 0}
-                className="rounded p-0.5 text-muted transition-colors hover:text-foreground disabled:opacity-20"
+                onClick={() => handleRemoveTask(task.id)}
+                className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-all ${
+                  confirmRemove === task.id
+                    ? 'bg-danger text-white'
+                    : 'text-muted hover:bg-danger/20 hover:text-danger'
+                }`}
               >
-                <ArrowUp size={12} />
-              </button>
-              <button
-                onClick={() => moveTask(i, 'down')}
-                disabled={i === tasks.length - 1}
-                className="rounded p-0.5 text-muted transition-colors hover:text-foreground disabled:opacity-20"
-              >
-                <ArrowDown size={12} />
+                {confirmRemove === task.id ? (
+                  <span className="flex items-center gap-1">
+                    <Trash2 size={12} />
+                    Confirm
+                  </span>
+                ) : (
+                  <X size={16} />
+                )}
               </button>
             </div>
-            <span className="text-xl">{task.emoji}</span>
-            <span className="flex-1 text-sm font-medium text-foreground">{task.name}</span>
-            <button
-              onClick={() => handleRemoveTask(task.id)}
-              className={`rounded-lg px-2 py-1.5 text-xs font-medium transition-all ${
-                confirmRemove === task.id
-                  ? 'bg-danger text-white'
-                  : 'text-muted hover:bg-danger/20 hover:text-danger'
-              }`}
-            >
-              {confirmRemove === task.id ? (
-                <span className="flex items-center gap-1">
-                  <Trash2 size={12} />
-                  Confirm
-                </span>
-              ) : (
-                <X size={16} />
-              )}
-            </button>
+            {/* Frequency toggle */}
+            <div className="mt-2 ml-8 flex gap-2">
+              <button
+                onClick={() => toggleFrequency(task.id, task.frequency)}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                  task.frequency === 'per_session'
+                    ? 'bg-accent/20 text-accent-light'
+                    : 'bg-surface-light text-muted hover:text-foreground'
+                }`}
+              >
+                <Repeat size={10} />
+                Every check-in
+              </button>
+              <button
+                onClick={() => toggleFrequency(task.id, task.frequency)}
+                className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                  task.frequency === 'daily'
+                    ? 'bg-accent/20 text-accent-light'
+                    : 'bg-surface-light text-muted hover:text-foreground'
+                }`}
+              >
+                <RotateCw size={10} />
+                Once daily
+              </button>
+            </div>
           </div>
         ))}
 
         {/* Add Task */}
-        <div className="space-y-2 rounded-xl bg-surface p-4">
+        <div className="space-y-3 rounded-xl bg-surface p-4">
           <div className="flex gap-2">
             <button
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-light text-xl transition-colors hover:bg-surface-light/80"
-              title="Pick emoji"
             >
               {newTaskEmoji}
             </button>
@@ -197,6 +231,32 @@ export default function SettingsPage() {
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-all hover:bg-accent-light active:scale-95 disabled:opacity-40"
             >
               <Plus size={18} />
+            </button>
+          </div>
+
+          {/* Frequency selector for new task */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setNewTaskFrequency('per_session')}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all ${
+                newTaskFrequency === 'per_session'
+                  ? 'bg-accent/20 text-accent-light ring-1 ring-accent/30'
+                  : 'bg-surface-light text-muted'
+              }`}
+            >
+              <Repeat size={12} />
+              Every check-in
+            </button>
+            <button
+              onClick={() => setNewTaskFrequency('daily')}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all ${
+                newTaskFrequency === 'daily'
+                  ? 'bg-accent/20 text-accent-light ring-1 ring-accent/30'
+                  : 'bg-surface-light text-muted'
+              }`}
+            >
+              <RotateCw size={12} />
+              Once daily
             </button>
           </div>
 
@@ -313,7 +373,6 @@ export default function SettingsPage() {
         Log Out
       </button>
 
-      {/* Bottom spacer for nav bar */}
       <div className="h-4" />
     </div>
   );

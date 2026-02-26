@@ -19,6 +19,7 @@ CREATE TABLE tasks (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   emoji TEXT NOT NULL DEFAULT '✅',
+  frequency TEXT NOT NULL DEFAULT 'per_session', -- 'daily' or 'per_session'
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   removed_at TIMESTAMPTZ DEFAULT NULL

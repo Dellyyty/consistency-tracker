@@ -13,10 +13,9 @@ import StatCard from '@/components/StatCard';
 import StreakFlame from '@/components/StreakFlame';
 import MotivationalBanner from '@/components/MotivationalBanner';
 import ProgressRing from '@/components/ProgressRing';
-import TaskCheckbox from '@/components/TaskCheckbox';
 import { getUserToday, getCurrentSessionNumber, getSessionLabel, getCurrentTimeHHMM } from '@/lib/dates';
-import { CheckIn, Completion, Task, SessionStatus } from '@/lib/types';
-import { Plus, X } from 'lucide-react';
+import { CheckIn, Completion, Task, SessionStatus, TodayTaskStatus } from '@/lib/types';
+import { Plus, X, Check, Repeat, RotateCw } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -53,14 +52,34 @@ export default function DashboardPage() {
 
   const stats = useStats(checkIns, completions, tasks, allTasks, startDate, timezone);
 
-  // Build session statuses for today
   const today = getUserToday(timezone);
   const checkInTimes = (user?.check_in_times || ['07:00', '12:00', '20:00']) as string[];
   const currentSession = getCurrentSessionNumber(checkInTimes, timezone);
   const currentTime = getCurrentTimeHHMM(timezone);
 
   const todayCheckIns = checkIns.filter((ci) => ci.date === today);
+  const todayCompletions = completions.filter((c) =>
+    todayCheckIns.some((ci) => ci.id === c.check_in_id)
+  );
 
+  // Build today's task status list
+  const todayTaskStatuses: TodayTaskStatus[] = tasks.map((task) => {
+    const taskCompletions = todayCompletions.filter(
+      (c) => c.task_id === task.id && c.completed
+    );
+    const completedCount = taskCompletions.length;
+    const requiredCount = task.frequency === 'daily' ? 1 : 3;
+    return {
+      task,
+      completedCount: Math.min(completedCount, requiredCount),
+      requiredCount,
+      done: completedCount >= requiredCount,
+    };
+  });
+
+  const tasksCompleted = todayTaskStatuses.filter((t) => t.done).length;
+
+  // Session statuses
   const sessions: SessionStatus[] = checkInTimes
     .sort()
     .map((time, i) => {
@@ -100,7 +119,7 @@ export default function DashboardPage() {
     );
   }
 
-  // First-time user with no tasks - onboarding
+  // First-time user with no tasks
   if (tasks.length === 0) {
     return (
       <div className="mx-auto max-w-md px-4 pt-6">
@@ -117,7 +136,7 @@ export default function DashboardPage() {
           <Plus size={40} className="text-muted" />
           <h2 className="text-lg font-bold text-foreground">Add your daily tasks</h2>
           <p className="text-center text-sm text-muted">
-            Set up the habits you want to track every day. You&apos;ll check in 3 times daily to mark what you completed.
+            Set up the habits you want to track. You can choose whether each task needs to be done once a day or at every check-in.
           </p>
           <button
             onClick={() => router.push('/settings')}
@@ -154,11 +173,78 @@ export default function DashboardPage() {
       {/* Countdown */}
       <Countdown daysLeft={daysLeft} progress={progress} />
 
+      {/* TODAY'S TASKS - the main clear section */}
+      <div className="rounded-2xl bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-foreground">
+            Today&apos;s Tasks
+          </h2>
+          <span className="rounded-full bg-surface-light px-2.5 py-0.5 text-xs font-semibold text-muted">
+            {tasksCompleted}/{tasks.length} done
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          {todayTaskStatuses.map(({ task, completedCount, requiredCount, done }) => (
+            <div
+              key={task.id}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                done ? 'bg-success/10' : 'bg-surface-light'
+              }`}
+            >
+              <span className="text-lg">{task.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${done ? 'text-success' : 'text-foreground'}`}>
+                  {task.name}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {task.frequency === 'daily' ? (
+                    <span className="text-[10px] text-muted flex items-center gap-0.5">
+                      <RotateCw size={8} />
+                      Once daily
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-muted flex items-center gap-0.5">
+                      <Repeat size={8} />
+                      Every check-in
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Progress indicator */}
+              <div className="flex items-center gap-1 shrink-0">
+                {requiredCount === 1 ? (
+                  // Daily: single check
+                  <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                    done ? 'bg-success' : 'border-2 border-muted/30'
+                  }`}>
+                    {done && <Check size={14} className="text-white" strokeWidth={3} />}
+                  </div>
+                ) : (
+                  // Per session: show 3 dots
+                  <div className="flex gap-1">
+                    {Array.from({ length: requiredCount }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          i < completedCount ? 'bg-success' : 'bg-muted/20'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Today's Sessions */}
       <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted">Today&apos;s Check-ins</h2>
+        <h2 className="text-sm font-semibold text-muted">Check-in Sessions</h2>
         {sessions.map((session) => {
           const completedCount = session.completions?.filter((c) => c.completed).length || 0;
+          const sessionTasks = session.status === 'completed' ? tasks : [];
           return (
             <div key={session.sessionNumber}>
               <CheckInCard
@@ -170,7 +256,7 @@ export default function DashboardPage() {
                 totalCount={tasks.length}
                 onClick={() => handleSessionClick(session)}
               />
-              {/* Expanded completed session - show task results */}
+              {/* Expanded completed session */}
               {expandedSession === session.sessionNumber && session.status === 'completed' && (
                 <div className="mt-1 space-y-1.5 rounded-xl bg-surface/50 p-3 fade-in-up">
                   {tasks.map((t) => {
@@ -209,13 +295,10 @@ export default function DashboardPage() {
         <StatCard label="All Time" value={`${stats.overall.allTime}%`} />
       </div>
 
-      {/* Today's Progress Ring */}
-      <div className="flex justify-center">
-        <ProgressRing percentage={stats.overall.today} size={100} strokeWidth={8} label="today" />
-      </div>
-
       {/* Motivational Banner */}
       <MotivationalBanner percentage={stats.overall.today} />
+
+      <div className="h-4" />
     </div>
   );
 }

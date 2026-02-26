@@ -9,12 +9,15 @@ export interface User {
   created_at: string;
 }
 
+export type TaskFrequency = 'daily' | 'per_session';
+
 export interface Task {
   id: string;
   user_id: string;
   name: string;
   emoji: string;
   sort_order: number;
+  frequency: TaskFrequency; // 'daily' = once/day, 'per_session' = at each check-in
   created_at: string;
   removed_at: string | null;
 }
@@ -42,6 +45,14 @@ export interface SessionStatus {
   status: 'completed' | 'available' | 'upcoming' | 'missed';
   checkIn?: CheckIn;
   completions?: Completion[];
+}
+
+export interface TodayTaskStatus {
+  task: Task;
+  // For daily: done or not. For per_session: how many of 3 sessions completed
+  completedCount: number;
+  requiredCount: number; // 1 for daily, 3 for per_session
+  done: boolean;
 }
 
 export interface DayStats {

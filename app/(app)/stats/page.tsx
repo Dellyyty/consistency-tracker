@@ -12,7 +12,7 @@ import WeeklyHeatmap from '@/components/WeeklyHeatmap';
 import MonthlyCalendar from '@/components/MonthlyCalendar';
 import { getUserToday } from '@/lib/dates';
 import { CheckIn, Completion, Task } from '@/lib/types';
-import { Target, Flame, Trophy, ArrowLeft, BarChart3 } from 'lucide-react';
+import { Target, Flame, Trophy, ArrowLeft, BarChart3, Repeat, RotateCw } from 'lucide-react';
 
 export default function StatsPage() {
   const { user } = useAuth();
@@ -164,7 +164,12 @@ export default function StatsPage() {
               <span className="text-xl">{ts.task.emoji}</span>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-foreground">{ts.task.name}</p>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{ts.task.name}</p>
+                    <p className="flex items-center gap-1 text-[10px] text-muted">
+                      {ts.task.frequency === 'daily' ? <><RotateCw size={8} /> Once daily</> : <><Repeat size={8} /> Every check-in</>}
+                    </p>
+                  </div>
                   <span className="text-xs text-muted">{ts.totalCompleted}/{ts.totalPossible}</span>
                 </div>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-light">

@@ -1,5 +1,19 @@
 import { CheckIn, Completion, Task, DayStats, TaskStats } from './types';
-import { parseISO, isBefore, isAfter, isEqual, format } from 'date-fns';
+import { parseISO, format } from 'date-fns';
+
+function getActiveTasksForDate(tasks: Task[], date: string): Task[] {
+  return tasks.filter((t) => {
+    const created = format(parseISO(t.created_at), 'yyyy-MM-dd');
+    const isCreatedBefore = created <= date;
+    const isNotRemoved = !t.removed_at || format(parseISO(t.removed_at), 'yyyy-MM-dd') > date;
+    return isCreatedBefore && isNotRemoved;
+  });
+}
+
+// How many completions are possible for a task on a given day
+function taskMaxForDay(task: Task, sessionsPerDay: number): number {
+  return task.frequency === 'daily' ? 1 : sessionsPerDay;
+}
 
 export function computeDayStats(
   date: string,
@@ -8,23 +22,24 @@ export function computeDayStats(
   tasks: Task[],
   sessionsPerDay: number = 3
 ): DayStats {
-  // Get active tasks for this date
-  const activeTasks = tasks.filter((t) => {
-    const created = format(parseISO(t.created_at), 'yyyy-MM-dd');
-    const isCreatedBefore = created <= date;
-    const isNotRemoved = !t.removed_at || format(parseISO(t.removed_at), 'yyyy-MM-dd') > date;
-    return isCreatedBefore && isNotRemoved;
-  });
-
+  const activeTasks = getActiveTasksForDate(tasks, date);
   const dayCheckIns = checkIns.filter((ci) => ci.date === date);
-  const totalPossible = activeTasks.length * sessionsPerDay;
-
-  let completedCount = 0;
-  const dayCompletionIds = dayCheckIns.map((ci) => ci.id);
-  const dayCompletions = completions.filter((c) =>
-    dayCompletionIds.includes(c.check_in_id) && c.completed
+  const dayCheckInIds = dayCheckIns.map((ci) => ci.id);
+  const dayCompletions = completions.filter(
+    (c) => dayCheckInIds.includes(c.check_in_id) && c.completed
   );
-  completedCount = dayCompletions.length;
+
+  let totalPossible = 0;
+  let completedCount = 0;
+
+  for (const task of activeTasks) {
+    const max = taskMaxForDay(task, sessionsPerDay);
+    totalPossible += max;
+
+    const taskCompletions = dayCompletions.filter((c) => c.task_id === task.id).length;
+    // Cap at max (daily task can only count as 1 even if marked in multiple sessions)
+    completedCount += Math.min(taskCompletions, max);
+  }
 
   return {
     date,
@@ -44,14 +59,12 @@ export function computeStreak(
 ): { current: number; longest: number } {
   if (dates.length === 0) return { current: 0, longest: 0 };
 
-  // Sort dates descending (most recent first)
   const sorted = [...dates].sort().reverse();
 
   let currentStreak = 0;
   let longestStreak = 0;
   let tempStreak = 0;
 
-  // Check from most recent date backward
   for (const date of sorted) {
     const stats = computeDayStats(date, checkIns, completions, tasks, sessionsPerDay);
 
@@ -64,7 +77,6 @@ export function computeStreak(
     }
   }
 
-  // If we never broke the streak
   if (currentStreak === 0) currentStreak = tempStreak;
   if (tempStreak > longestStreak) longestStreak = tempStreak;
 
@@ -97,23 +109,22 @@ export function computeTaskStats(
   dates: string[],
   sessionsPerDay: number = 3
 ): TaskStats {
-  // Only count dates where this task was active
   const activeDates = dates.filter((date) => {
     const created = format(parseISO(task.created_at), 'yyyy-MM-dd');
-    const isCreatedBefore = created <= date;
-    const isNotRemoved = !task.removed_at || format(parseISO(task.removed_at), 'yyyy-MM-dd') > date;
-    return isCreatedBefore && isNotRemoved;
+    return created <= date && (!task.removed_at || format(parseISO(task.removed_at), 'yyyy-MM-dd') > date);
   });
 
-  const totalPossible = activeDates.length * sessionsPerDay;
+  const maxPerDay = taskMaxForDay(task, sessionsPerDay);
+  const totalPossible = activeDates.length * maxPerDay;
 
-  const allCheckInIds = checkIns
-    .filter((ci) => activeDates.includes(ci.date))
-    .map((ci) => ci.id);
-
-  const totalCompleted = completions.filter(
-    (c) => c.task_id === task.id && allCheckInIds.includes(c.check_in_id) && c.completed
-  ).length;
+  let totalCompleted = 0;
+  for (const date of activeDates) {
+    const dayCheckInIds = checkIns.filter((ci) => ci.date === date).map((ci) => ci.id);
+    const count = completions.filter(
+      (c) => c.task_id === task.id && dayCheckInIds.includes(c.check_in_id) && c.completed
+    ).length;
+    totalCompleted += Math.min(count, maxPerDay);
+  }
 
   return {
     task,
@@ -121,16 +132,4 @@ export function computeTaskStats(
     totalCompleted,
     percentage: totalPossible > 0 ? Math.round((totalCompleted / totalPossible) * 100) : 0,
   };
-}
-
-export function getMotivationalMessage(percentage: number, messages: typeof import('./constants').MOTIVATIONAL_MESSAGES): string {
-  let category: keyof typeof messages;
-  if (percentage === 100) category = 'perfect';
-  else if (percentage >= 75) category = 'great';
-  else if (percentage >= 50) category = 'good';
-  else if (percentage > 0) category = 'low';
-  else category = 'none';
-
-  const pool = messages[category];
-  return pool[Math.floor(Math.random() * pool.length)];
 }
